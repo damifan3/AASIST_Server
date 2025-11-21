@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AASIST 语音伪造检测</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+        }
+        .container {
+            background: #ffffff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+        h1 {
+            color: #1a1a1a;
+            margin-bottom: 1.5rem;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .upload-label {
+            display: inline-block;
+            padding: 12px 25px;
+            background-color: #007aff;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .upload-label:hover {
+            background-color: #005bb5;
+        }
+        button {
+            display: none; /* 按钮将在选择文件后显示 */
+            padding: 12px 25px;
+            background-color: #34c759;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            margin-top: 1rem;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #2ca048;
+        }
+        #file-name {
+            margin-top: 1rem;
+            font-style: italic;
+            color: #555;
+        }
+        #result-container {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            display: none; /* 默认隐藏 */
+        }
+        #result-label {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        .bonafide { color: #34c759; }
+        .spoof { color: #ff3b30; }
+        #result-score {
+            font-size: 1rem;
+            color: #666;
+            margin-top: 0.5rem;
+        }
+        .spinner {
+            border: 4px solid rgba(0,0,0,.1);
+            border-left-color: #007aff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 1.5rem auto 0 auto;
+            display: none;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>中文语音克隆检测</h1>
+        
+        <label for="audio-file" class="upload-label">
+            选择 .wav 音频文件
+        </label>
+        <input type="file" id="audio-file" accept=".wav,audio/wav" onchange="fileSelected(event)">
+        
+        <div id="file-name">未选择文件</div>
+
+        <button id="predict-button" onclick="uploadAndPredict()">开始检测</button>
+
+        <div class="spinner" id="spinner"></div>
+
+        <div id="result-container">
+            <h3>检测结果</h3>
+            <div id="result-label"></div>
+            <div id="result-score"></div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('audio-file');
+        const predictButton = document.getElementById('predict-button');
+        const fileNameDiv = document.getElementById('file-name');
+        const resultContainer = document.getElementById('result-container');
+        const resultLabel = document.getElementById('result-label');
+        const resultScore = document.getElementById('result-score');
+        const spinner = document.getElementById('spinner');
+
+        function fileSelected(event) {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                fileNameDiv.textContent = file.name;
+                predictButton.style.display = 'inline-block';
+                resultContainer.style.display = 'none'; // 隐藏旧结果
+            } else {
+                fileNameDiv.textContent = '未选择文件';
+                predictButton.style.display = 'none';
+            }
+        }
+
+        async function uploadAndPredict() {
+            if (fileInput.files.length === 0) {
+                alert('请先选择一个文件。');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // 显示加载动画，隐藏按钮和结果
+            spinner.style.display = 'block';
+            predictButton.style.display = 'none';
+            resultContainer.style.display = 'none';
+
+            try {
+                const response = await fetch('/predict/', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP 错误! 状态: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // 显示结果
+                displayResult(data);
+
+            } catch (error) {
+                console.error('检测失败:', error);
+                resultContainer.style.display = 'block';
+                resultLabel.textContent = '检测失败';
+                resultLabel.className = 'spoof'; // 使用红色
+                resultScore.textContent = error.message;
+            } finally {
+                // 隐藏加载动画
+                spinner.style.display = 'none';
+                // 允许用户再次选择文件 (保持按钮隐藏，直到选择新文件)
+                // 重新显示按钮以便重新检测同一文件
+                predictButton.style.display = 'inline-block'; 
+            }
+        }
+
+        function displayResult(data) {
+            resultContainer.style.display = 'block';
+            resultLabel.textContent = data.result_label; // "真实" 或 "伪造"
+            
+            if (data.is_bonafide) {
+                resultLabel.className = 'bonafide'; // 绿色
+            } else {
+                resultLabel.className = 'spoof'; // 红色
+            }
+
+            resultScore.textContent = `(真实分数: ${data.bonafide_score.toFixed(4)})`;
+        }
+    </script>
+
+</body>
+</html>

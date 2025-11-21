@@ -1,0 +1,4 @@
+1、打开自己虚拟环境
+2、文件内打开终端，pip install -r requirements.txt下载依赖
+3、python app.py运行后端
+4、http://127.0.0.1:8000登陆浏览器
