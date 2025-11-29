@@ -46,7 +46,7 @@
             background-color: #005bb5;
         }
         button {
-            display: none; /* 按钮将在选择文件后显示 */
+            /* 使用 Vue 控制显示/隐藏，不在 CSS 中硬编码 display */
             padding: 12px 25px;
             background-color: #34c759;
             color: white;
@@ -71,7 +71,6 @@
             padding: 1.5rem;
             border-radius: 8px;
             background-color: #f9f9f9;
-            display: none; /* 默认隐藏 */
         }
         #result-label {
             font-size: 1.8rem;
@@ -92,7 +91,6 @@
             height: 40px;
             animation: spin 1s linear infinite;
             margin: 1.5rem auto 0 auto;
-            display: none;
         }
         @keyframes spin {
             to { transform: rotate(360deg); }
@@ -101,106 +99,158 @@
 </head>
 <body>
 
+    <div id="app">
     <div class="container">
         <h1>中文语音克隆检测</h1>
         
+        <!-- 点击 label 会触发隐藏的 input 选择文件 -->
         <label for="audio-file" class="upload-label">
             选择 .wav 音频文件
         </label>
-        <input type="file" id="audio-file" accept=".wav,audio/wav" onchange="fileSelected(event)">
+        <!-- 使用 Vue 的 @change 事件绑定来处理文件选择 -->
+        <input type="file" id="audio-file" accept=".wav,audio/wav" @change="onFileChange">
         
-        <div id="file-name">未选择文件</div>
+        <!-- 使用双花括号显示响应式文件名 -->
+        <div id="file-name">{{ fileName }}</div>
 
-        <button id="predict-button" onclick="uploadAndPredict()">开始检测</button>
+        <!-- 按钮显示由 Vue 控制：当有文件时显示，同时在加载时禁用 -->
+        <button id="predict-button" @click="uploadAndPredict" :disabled="loading" v-show="selectedFile">
+            <!-- 按钮文本在加载时改变，给用户反馈 -->
+            <span v-if="!loading">开始检测</span>
+            <span v-else>检测中...</span>
+        </button>
 
-        <div class="spinner" id="spinner"></div>
+        <!-- 加载动画由 Vue 控制显示 -->
+        <div class="spinner" v-show="loading"></div>
 
-        <div id="result-container">
+        <!-- 检测结果区域由 Vue 控制显示 -->
+        <div id="result-container" v-if="resultVisible">
             <h3>检测结果</h3>
-            <div id="result-label"></div>
-            <div id="result-score"></div>
+            <!-- 根据结果的 is_bonafide 字段选择样式 -->
+            <div id="result-label" :class="result.is_bonafide ? 'bonafide' : 'spoof'">{{ result.result_label }}</div>
+            <div id="result-score">(真实分数: {{ result.bonafide_score.toFixed(4) }})</div>
         </div>
     </div>
+    </div>
+    </div>
+
+    <!--
+        下面使用 Vue 3 (通过 CDN) 将页面改写为响应式应用。
+        说明：为了保持简单，这里使用全局构建 (global build) 的 Vue，适合直接在单个 HTML 文件中开发和演示。
+        如果需要更复杂的工程化（例如单文件组件、模块打包），可以改用 Vite + 单文件组件 (.vue)。
+    -->
+    <!-- 引入 Vue 3 的全局构建 (生产版)。开发时可改为 vue.global.js（非 prod）。 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 
     <script>
-        const fileInput = document.getElementById('audio-file');
-        const predictButton = document.getElementById('predict-button');
-        const fileNameDiv = document.getElementById('file-name');
-        const resultContainer = document.getElementById('result-container');
-        const resultLabel = document.getElementById('result-label');
-        const resultScore = document.getElementById('result-score');
-        const spinner = document.getElementById('spinner');
+        /*
+         Vue 3 应用说明（中文注释说明每一部分的用途）：
 
-        function fileSelected(event) {
-            if (fileInput.files.length > 0) {
-                const file = fileInput.files[0];
-                fileNameDiv.textContent = file.name;
-                predictButton.style.display = 'inline-block';
-                resultContainer.style.display = 'none'; // 隐藏旧结果
-            } else {
-                fileNameDiv.textContent = '未选择文件';
-                predictButton.style.display = 'none';
-            }
-        }
+         - createApp(): 创建 Vue 应用实例并挂载到 DOM 节点 `#app`。
+         - reactive / ref: 用于创建响应式状态；当状态改变时，绑定到模板的视图会自动更新。
+         - methods: 定义可在模板中调用的函数（例如文件选择与上传逻辑）。
+         - v-model / v-if / v-on: 模板指令用于绑定数据、条件渲染与事件绑定。
 
-        async function uploadAndPredict() {
-            if (fileInput.files.length === 0) {
-                alert('请先选择一个文件。');
-                return;
-            }
+         下面的实现把原有的 DOM 操作（getElementById、手动显示/隐藏）全部改为 Vue 的响应式状态控制，
+         让代码更易维护和扩展，同时保留与后端 `/predict/` 的交互逻辑（fetch 上传 FormData）。
+        */
 
-            const file = fileInput.files[0];
-            const formData = new FormData();
-            formData.append('file', file);
+        const { createApp, ref } = Vue;
 
-            // 显示加载动画，隐藏按钮和结果
-            spinner.style.display = 'block';
-            predictButton.style.display = 'none';
-            resultContainer.style.display = 'none';
+        createApp({
+            setup() {
+                // 选中文件的引用（File 对象）
+                const selectedFile = ref(null);
 
-            try {
-                const response = await fetch('/predict/', {
-                    method: 'POST',
-                    body: formData,
-                });
+                // 用于显示的文件名，用户友好提示
+                const fileName = ref('未选择文件');
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || `HTTP 错误! 状态: ${response.status}`);
+                // 是否正在加载（用于显示 spinner）
+                const loading = ref(false);
+
+                // 是否显示检测结果区域
+                const resultVisible = ref(false);
+
+                // 检测结果结构：{ is_bonafide: boolean, bonafide_score: number, result_label: string }
+                const result = ref({ is_bonafide: false, bonafide_score: 0, result_label: '' });
+
+                // 文件选择处理函数（由 <input type="file"> 的 change 事件触发）
+                function onFileChange(event) {
+                    const files = event.target.files;
+                    if (files && files.length > 0) {
+                        selectedFile.value = files[0];
+                        fileName.value = files[0].name;
+                        // 重置上一次的结果
+                        resultVisible.value = false;
+                    } else {
+                        selectedFile.value = null;
+                        fileName.value = '未选择文件';
+                    }
                 }
 
-                const data = await response.json();
+                // 上传并请求后端预测的异步函数
+                async function uploadAndPredict() {
+                    if (!selectedFile.value) {
+                        // 在 Vue 中你也可以用更优雅的 UI 提示，这里沿用简单 alert
+                        alert('请先选择一个文件。');
+                        return;
+                    }
 
-                // 显示结果
-                displayResult(data);
+                    // 创建 FormData 并附加文件，后端 Flask / FastAPI 等能接收
+                    const formData = new FormData();
+                    formData.append('file', selectedFile.value);
 
-            } catch (error) {
-                console.error('检测失败:', error);
-                resultContainer.style.display = 'block';
-                resultLabel.textContent = '检测失败';
-                resultLabel.className = 'spoof'; // 使用红色
-                resultScore.textContent = error.message;
-            } finally {
-                // 隐藏加载动画
-                spinner.style.display = 'none';
-                // 允许用户再次选择文件 (保持按钮隐藏，直到选择新文件)
-                // 重新显示按钮以便重新检测同一文件
-                predictButton.style.display = 'inline-block'; 
+                    // 设置加载中状态，模板会显示 spinner，并禁用按钮
+                    loading.value = true;
+                    resultVisible.value = false;
+
+                    try {
+                        const response = await fetch('/predict/', {
+                            method: 'POST',
+                            body: formData,
+                        });
+
+                        if (!response.ok) {
+                            // 尝试解析后端返回的错误信息
+                            let msg = `HTTP 错误: ${response.status}`;
+                            try {
+                                const err = await response.json();
+                                msg = err.detail || JSON.stringify(err);
+                            } catch (e) {
+                                // 无法 JSON 解析则保持原消息
+                            }
+                            throw new Error(msg);
+                        }
+
+                        const data = await response.json();
+
+                        // 将后端返回的数据写入 result 并显示
+                        result.value = data;
+                        resultVisible.value = true;
+
+                    } catch (err) {
+                        // 出错时显示一个错误结果（将错误信息放在 result_label 中）
+                        result.value = { is_bonafide: false, bonafide_score: 0, result_label: '检测失败：' + err.message };
+                        resultVisible.value = true;
+                        console.error('预测出错：', err);
+                    } finally {
+                        // 无论成功或失败都要取消加载状态
+                        loading.value = false;
+                    }
+                }
+
+                // 导出到模板中使用的数据和方法
+                return {
+                    selectedFile,
+                    fileName,
+                    loading,
+                    resultVisible,
+                    result,
+                    onFileChange,
+                    uploadAndPredict,
+                };
             }
-        }
-
-        function displayResult(data) {
-            resultContainer.style.display = 'block';
-            resultLabel.textContent = data.result_label; // "真实" 或 "伪造"
-            
-            if (data.is_bonafide) {
-                resultLabel.className = 'bonafide'; // 绿色
-            } else {
-                resultLabel.className = 'spoof'; // 红色
-            }
-
-            resultScore.textContent = `(真实分数: ${data.bonafide_score.toFixed(4)})`;
-        }
+        }).mount('#app');
     </script>
 
 </body>
