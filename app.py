@@ -1,103 +1,127 @@
 import uvicorn
 import os
 import tempfile
+from typing import List
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
+from pydub import AudioSegment  # 用于格式转换
+
+# 引入预测器
 from predictor import AASISTPredictor
 
 # ==========================================================
-# ⚠️ 重要: 更新这些路径！
+# 配置路径
 # ==========================================================
-MODEL_PATH = "epoch_45_0.441.pth"   # 您的 .pth 权重文件路径
-CONFIG_PATH = "config_standalone_eval.json"   # 您的 .json 配置文件路径
-# 
-# ℹ️ 关于阈值 (THRESHOLD):
-# 0.5 是一个常见的起始点，但您应该使用验证集来找到最佳阈值。
-# 0.5 意味着 "如果模型有超过50%的置信度认为是真实的，那就是真实的"
-THRESHOLD = 1.510585
+MODEL_PATH = "epoch_45_0.441.pth" 
+CONFIG_PATH = "config_standalone_eval.json"
+THRESHOLD = 1.510585 
 # ==========================================================
 
-# 检查文件是否存在
+# --- [关键] 配置 Pydub 使用本地 ffmpeg ---
+# 检查当前目录下是否有 ffmpeg.exe，如果有，指定给 pydub
+current_dir = os.path.dirname(os.path.abspath(__file__))
+local_ffmpeg = os.path.join(current_dir, "ffmpeg.exe")
+local_ffprobe = os.path.join(current_dir, "ffprobe.exe")
+
+if os.path.exists(local_ffmpeg):
+    AudioSegment.converter = local_ffmpeg
+    AudioSegment.ffprobe = local_ffprobe
+    print(f"检测到本地 FFmpeg，已启用: {local_ffmpeg}")
+else:
+    print("警告: 未在当前目录检测到 ffmpeg.exe。如果系统未安装 FFmpeg，.m4a 格式将无法处理。")
+# ----------------------------------------
+
 if not os.path.exists(MODEL_PATH) or not os.path.exists(CONFIG_PATH):
     print("错误: 找不到模型或配置文件。")
-    print(f"请确保 '{MODEL_PATH}' 和 '{CONFIG_PATH}' 存在于当前目录。")
     exit()
 
-# ---- 初始化应用和预测器 ----
-app = FastAPI(title="AASIST 语音伪造检测")
+app = FastAPI(title="AASIST 语音伪造检测 (批量版)")
 
-# 在全局范围内加载模型，这样它只会被加载一次
-print("正在加载模型... 这可能需要几秒钟。")
+print("正在加载模型...")
 predictor = AASISTPredictor(
     model_path=MODEL_PATH,
     config_path=CONFIG_PATH,
     threshold=THRESHOLD
 )
-print("模型加载完毕，服务器已准备就绪。")
-
-
-# ---- API 端点 ----
+print("模型加载完毕。")
 
 @app.post("/predict/")
-async def predict_audio(file: UploadFile = File(...)):
-    """
-    接收一个音频文件并返回检测结果。
-    """
-    # FastAPI 的 UploadFile 是一个 "spooled" 文件，
-    # 我们需要将其保存到一个临时的 .wav 文件中，以便 librosa 可以读取它。
-    
-    # 使用 tempfile 安全地创建临时文件
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-            # 将上传的文件内容写入临时文件
-            temp_file.write(await file.read())
-            temp_file_path = temp_file.name
-        
-        # --- 核心: 在临时文件上运行预测 ---
-        print(f"正在处理文件: {file.filename}")
-        result = predictor.predict(temp_file_path)
-        print(f"预测结果: {result}")
-        
-    except Exception as e:
-        print(f"处理中发生错误: {e}")
-        raise HTTPException(status_code=500, detail=f"处理文件时发生错误: {str(e)}")
-        
-    finally:
-        # 确保我们总是清理临时文件
-        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-            
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
+async def predict_audio_batch(files: List[UploadFile] = File(...)):
+    results = []
 
-    # 返回 JSON 结果
-    return {
-        "filename": file.filename,
-        "result_label": result["label"],
-        "bonafide_score": result["score"],
-        "is_bonafide": result["label"] == "真实"
-    }
+    for file in files:
+        temp_input_path = None
+        temp_wav_path = None
+        
+        try:
+            # 1. 保存用户上传的原始文件
+            file_ext = os.path.splitext(file.filename)[1].lower()
+            if not file_ext:
+                file_ext = ".temp" 
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+                content = await file.read()
+                temp_file.write(content)
+                temp_input_path = temp_file.name
+            
+            # 2. 格式转换逻辑
+            # 模型和librosa对WAV支持最好。如果不是wav，用pydub转成wav
+            target_file_path = temp_input_path
+            
+            if file_ext != ".wav":
+                print(f"正在转换格式: {file.filename} -> wav")
+                # 创建一个临时的 wav 文件名
+                temp_wav_path = temp_input_path + ".converted.wav"
+                
+                # 使用 pydub 加载并导出为 wav
+                audio = AudioSegment.from_file(temp_input_path)
+                audio.export(temp_wav_path, format="wav")
+                
+                # 将目标路径指向这个新的 wav 文件
+                target_file_path = temp_wav_path
+
+            # 3. 运行预测
+            print(f"正在处理: {file.filename}")
+            pred_result = predictor.predict(target_file_path)
+            
+            results.append({
+                "filename": file.filename,
+                "result_label": pred_result.get("label", "错误"),
+                "score": pred_result.get("score", 0),
+                "is_bonafide": pred_result.get("label") == "真实",
+                "error": pred_result.get("error", None)
+            })
+
+        except Exception as e:
+            print(f"文件 {file.filename} 处理出错: {e}")
+            results.append({
+                "filename": file.filename,
+                "result_label": "错误",
+                "score": 0,
+                "is_bonafide": False,
+                "error": f"处理失败: {str(e)} (请检查 ffmpeg.exe 是否在目录下)"
+            })
+            
+        finally:
+            # 4. 清理所有临时文件
+            try:
+                if temp_input_path and os.path.exists(temp_input_path):
+                    os.remove(temp_input_path)
+                if temp_wav_path and os.path.exists(temp_wav_path):
+                    os.remove(temp_wav_path)
+            except:
+                pass
+
+    return results
 
 @app.get("/", response_class=HTMLResponse)
 async def get_frontend():
-    """
-    提供 HTML 前端页面。
-    """
     try:
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        return "错误: 找不到 index.html。请确保它与 app.py 位于同一目录中。"
+        return "错误: 找不到 index.html。"
 
-@app.get("/docs")
-async def get_docs():
-    # 重定向到 FastAPI 自动生成的文档
-    return RedirectResponse(url="/docs")
-
-
-# ---- 运行服务器 ----
 if __name__ == "__main__":
-    # 运行服务器，监听所有接口(0.0.0.0)的8000端口
-    # uvicorn.run(app, host="127.0.0.1", port=8000)
     print("启动服务器，访问 http://127.0.0.1:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)

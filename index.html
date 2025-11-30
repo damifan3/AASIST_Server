@@ -3,255 +3,319 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AASIST 语音伪造检测</title>
+    <title>中文语音克隆检测系统</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            min-height: 100vh;
-            background-color: #f4f7f6;
+            background-color: #f8f9fa;
             color: #333;
             margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
         }
+
         .container {
             background: #ffffff;
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-            width: 90%;
-            max-width: 500px;
+            padding: 3rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+            width: 100%;
+            max-width: 900px;
             text-align: center;
+            transition: all 0.3s ease;
         }
+
         h1 {
             color: #1a1a1a;
-            margin-bottom: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
         }
+
+        .subtitle {
+            color: #6c757d;
+            font-size: 0.95rem;
+            margin-bottom: 2.5rem;
+            font-weight: 400;
+        }
+
+
+        .upload-area {
+            border: 2px dashed #e9ecef;
+            border-radius: 12px;
+            padding: 50px 20px;
+            background-color: #fcfcfc;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .upload-area:hover {
+            border-color: #007aff;
+            background-color: #f0f7ff;
+        }
+
+
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 20px;
+            color: #007aff;
+            opacity: 0.8;
+        }
+
         input[type="file"] {
             display: none;
         }
-        .upload-label {
+
+        .btn {
             display: inline-block;
-            padding: 12px 25px;
+            padding: 12px 30px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: 600;
+            border: none;
+            font-size: 16px;
+            transition: 0.2s;
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
+        }
+
+        .btn-select {
             background-color: #007aff;
             color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background-color 0.2s;
         }
-        .upload-label:hover {
-            background-color: #005bb5;
+
+        .btn-select:hover {
+            background-color: #0062cc;
+            transform: translateY(-1px);
         }
-        button {
-            /* 使用 Vue 控制显示/隐藏，不在 CSS 中硬编码 display */
-            padding: 12px 25px;
+
+        .btn-detect {
             background-color: #34c759;
             color: white;
-            border: none;
+            margin-top: 20px;
+            display: none;
+            box-shadow: 0 4px 12px rgba(52, 199, 89, 0.3);
+        }
+
+        .btn-detect:hover {
+            background-color: #28a745;
+            transform: translateY(-1px);
+        }
+
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 30px;
+            background: white;
             border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 500;
-            margin-top: 1rem;
-            transition: background-color 0.2s;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            display: none;
         }
-        button:hover {
-            background-color: #2ca048;
+
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid #f1f3f5;
         }
-        #file-name {
-            margin-top: 1rem;
-            font-style: italic;
-            color: #555;
-        }
-        #result-container {
-            margin-top: 2rem;
-            padding: 1.5rem;
-            border-radius: 8px;
-            background-color: #f9f9f9;
-        }
-        #result-label {
-            font-size: 1.8rem;
+
+        th {
+            background-color: #f8f9fa;
             font-weight: 600;
+            color: #495057;
+            font-size: 0.9rem;
+            text-transform: uppercase;
         }
-        .bonafide { color: #34c759; }
-        .spoof { color: #ff3b30; }
-        #result-score {
-            font-size: 1rem;
-            color: #666;
-            margin-top: 0.5rem;
+
+        tr:last-child td {
+            border-bottom: none;
         }
-        .spinner {
-            border: 4px solid rgba(0,0,0,.1);
-            border-left-color: #007aff;
+
+
+        .badge {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-real { background-color: #d1e7dd; color: #0f5132; }
+        .badge-fake { background-color: #f8d7da; color: #842029; }
+        .badge-wait { background-color: #e9ecef; color: #495057; }
+        .badge-err  { background-color: #fff3cd; color: #856404; }
+
+
+        audio {
+            height: 36px;
+            width: 240px;
+            outline: none;
+        }
+
+        .loading {
+            display: none;
+            margin: 20px auto;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007aff;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 30px;
+            height: 30px;
             animation: spin 1s linear infinite;
-            margin: 1.5rem auto 0 auto;
         }
+
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+
+        .filename-cell {
+            font-family: Consolas, Monaco, "Andale Mono", monospace;
+            color: #333;
+            font-size: 0.9em;
         }
     </style>
 </head>
 <body>
 
-    <div id="app">
     <div class="container">
-        <h1>中文语音克隆检测</h1>
+        <h1>中文语音克隆检测系统</h1>
+        <p class="subtitle">支持格式：.wav .m4a等 ；支持批量上传</p>
         
-        <!-- 点击 label 会触发隐藏的 input 选择文件 -->
-        <label for="audio-file" class="upload-label">
-            选择 .wav 音频文件
-        </label>
-        <!-- 使用 Vue 的 @change 事件绑定来处理文件选择 -->
-        <input type="file" id="audio-file" accept=".wav,audio/wav" @change="onFileChange">
-        
-        <!-- 使用双花括号显示响应式文件名 -->
-        <div id="file-name">{{ fileName }}</div>
-
-        <!-- 按钮显示由 Vue 控制：当有文件时显示，同时在加载时禁用 -->
-        <button id="predict-button" @click="uploadAndPredict" :disabled="loading" v-show="selectedFile">
-            <!-- 按钮文本在加载时改变，给用户反馈 -->
-            <span v-if="!loading">开始检测</span>
-            <span v-else>检测中...</span>
-        </button>
-
-        <!-- 加载动画由 Vue 控制显示 -->
-        <div class="spinner" v-show="loading"></div>
-
-        <!-- 检测结果区域由 Vue 控制显示 -->
-        <div id="result-container" v-if="resultVisible">
-            <h3>检测结果</h3>
-            <!-- 根据结果的 is_bonafide 字段选择样式 -->
-            <div id="result-label" :class="result.is_bonafide ? 'bonafide' : 'spoof'">{{ result.result_label }}</div>
-            <div id="result-score">(真实分数: {{ result.bonafide_score.toFixed(4) }})</div>
+        <div class="upload-area" onclick="document.getElementById('audio-files').click()">
+            <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            
+            <br>
+            <label class="btn btn-select">
+                选择音频文件
+            </label>
+            
+            <input type="file" id="audio-files" multiple accept=".wav,audio/wav,.m4a,audio/x-m4a,audio/mp4" onchange="handleFiles(this.files)" onclick="event.stopPropagation()">
+            
+            <br>
+            <button id="btn-start" class="btn btn-detect" onclick="startBatchDetection(event)">🚀 开始检测</button>
+            <div id="loader" class="loading"></div>
         </div>
-    </div>
-    </div>
-    </div>
 
-    <!--
-        下面使用 Vue 3 (通过 CDN) 将页面改写为响应式应用。
-        说明：为了保持简单，这里使用全局构建 (global build) 的 Vue，适合直接在单个 HTML 文件中开发和演示。
-        如果需要更复杂的工程化（例如单文件组件、模块打包），可以改用 Vite + 单文件组件 (.vue)。
-    -->
-    <!-- 引入 Vue 3 的全局构建 (生产版)。开发时可改为 vue.global.js（非 prod）。 -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+        <table id="result-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">#</th>
+                    <th>文件名</th>
+                    <th>试听</th>
+                    <th style="width: 100px;">结果</th>
+                    <th style="width: 150px;">原始分数</th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                </tbody>
+        </table>
+    </div>
 
     <script>
-        /*
-         Vue 3 应用说明（中文注释说明每一部分的用途）：
+        let selectedFiles = [];
 
-         - createApp(): 创建 Vue 应用实例并挂载到 DOM 节点 `#app`。
-         - reactive / ref: 用于创建响应式状态；当状态改变时，绑定到模板的视图会自动更新。
-         - methods: 定义可在模板中调用的函数（例如文件选择与上传逻辑）。
-         - v-model / v-if / v-on: 模板指令用于绑定数据、条件渲染与事件绑定。
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            selectedFiles = files;
+            
+            const table = document.getElementById('result-table');
+            const tbody = document.getElementById('table-body');
+            const startBtn = document.getElementById('btn-start');
+            const uploadArea = document.querySelector('.upload-area');
+            
+            // 清空旧数据
+            tbody.innerHTML = '';
+            table.style.display = 'table'; // 显示表格
+            
+            // 简单的视觉反馈：减少上传区域的内边距，给表格腾出空间感
+            uploadArea.style.padding = "30px 20px";
+            
+            // 遍历所有选择的文件，生成表格行
+            Array.from(files).forEach((file, index) => {
+                const row = document.createElement('tr');
+                const audioUrl = URL.createObjectURL(file);
 
-         下面的实现把原有的 DOM 操作（getElementById、手动显示/隐藏）全部改为 Vue 的响应式状态控制，
-         让代码更易维护和扩展，同时保留与后端 `/predict/` 的交互逻辑（fetch 上传 FormData）。
-        */
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td class="filename-cell">${file.name}</td>
+                    <td><audio controls src="${audioUrl}"></audio></td>
+                    <td id="status-${index}"><span class="badge badge-wait">待检测</span></td>
+                    <td id="score-${index}">-</td>
+                `;
+                tbody.appendChild(row);
+            });
 
-        const { createApp, ref } = Vue;
+            startBtn.style.display = 'inline-block';
+            startBtn.textContent = `开始检测 (${files.length} 个文件)`;
+            // 阻止冒泡防止触发文件选择
+        }
 
-        createApp({
-            setup() {
-                // 选中文件的引用（File 对象）
-                const selectedFile = ref(null);
+        async function startBatchDetection(event) {
+            // 阻止冒泡，防止点击“开始检测”时又触发了外层的“选择文件”点击事件
+            if(event) event.stopPropagation();
 
-                // 用于显示的文件名，用户友好提示
-                const fileName = ref('未选择文件');
+            if (selectedFiles.length === 0) return;
 
-                // 是否正在加载（用于显示 spinner）
-                const loading = ref(false);
+            const startBtn = document.getElementById('btn-start');
+            const loader = document.getElementById('loader');
+            
+            startBtn.style.display = 'none';
+            loader.style.display = 'block';
 
-                // 是否显示检测结果区域
-                const resultVisible = ref(false);
-
-                // 检测结果结构：{ is_bonafide: boolean, bonafide_score: number, result_label: string }
-                const result = ref({ is_bonafide: false, bonafide_score: 0, result_label: '' });
-
-                // 文件选择处理函数（由 <input type="file"> 的 change 事件触发）
-                function onFileChange(event) {
-                    const files = event.target.files;
-                    if (files && files.length > 0) {
-                        selectedFile.value = files[0];
-                        fileName.value = files[0].name;
-                        // 重置上一次的结果
-                        resultVisible.value = false;
-                    } else {
-                        selectedFile.value = null;
-                        fileName.value = '未选择文件';
-                    }
-                }
-
-                // 上传并请求后端预测的异步函数
-                async function uploadAndPredict() {
-                    if (!selectedFile.value) {
-                        // 在 Vue 中你也可以用更优雅的 UI 提示，这里沿用简单 alert
-                        alert('请先选择一个文件。');
-                        return;
-                    }
-
-                    // 创建 FormData 并附加文件，后端 Flask / FastAPI 等能接收
-                    const formData = new FormData();
-                    formData.append('file', selectedFile.value);
-
-                    // 设置加载中状态，模板会显示 spinner，并禁用按钮
-                    loading.value = true;
-                    resultVisible.value = false;
-
-                    try {
-                        const response = await fetch('/predict/', {
-                            method: 'POST',
-                            body: formData,
-                        });
-
-                        if (!response.ok) {
-                            // 尝试解析后端返回的错误信息
-                            let msg = `HTTP 错误: ${response.status}`;
-                            try {
-                                const err = await response.json();
-                                msg = err.detail || JSON.stringify(err);
-                            } catch (e) {
-                                // 无法 JSON 解析则保持原消息
-                            }
-                            throw new Error(msg);
-                        }
-
-                        const data = await response.json();
-
-                        // 将后端返回的数据写入 result 并显示
-                        result.value = data;
-                        resultVisible.value = true;
-
-                    } catch (err) {
-                        // 出错时显示一个错误结果（将错误信息放在 result_label 中）
-                        result.value = { is_bonafide: false, bonafide_score: 0, result_label: '检测失败：' + err.message };
-                        resultVisible.value = true;
-                        console.error('预测出错：', err);
-                    } finally {
-                        // 无论成功或失败都要取消加载状态
-                        loading.value = false;
-                    }
-                }
-
-                // 导出到模板中使用的数据和方法
-                return {
-                    selectedFile,
-                    fileName,
-                    loading,
-                    resultVisible,
-                    result,
-                    onFileChange,
-                    uploadAndPredict,
-                };
+            const formData = new FormData();
+            for (let i = 0; i < selectedFiles.length; i++) {
+                formData.append('files', selectedFiles[i]);
             }
-        }).mount('#app');
-    </script>
 
+            try {
+                const response = await fetch('/predict/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`服务器错误: ${response.status}`);
+                }
+
+                const results = await response.json();
+                updateTableWithResults(results);
+
+            } catch (error) {
+                console.error(error);
+                alert("检测过程中发生错误: " + error.message);
+            } finally {
+                loader.style.display = 'none';
+                startBtn.style.display = 'inline-block';
+                startBtn.textContent = "重新检测";
+            }
+        }
+
+        function updateTableWithResults(results) {
+            results.forEach((res, index) => {
+                const statusCell = document.getElementById(`status-${index}`);
+                const scoreCell = document.getElementById(`score-${index}`);
+                
+                if (statusCell && scoreCell) {
+                    scoreCell.textContent = res.score.toFixed(4);
+                    
+                    if (res.error) {
+                        statusCell.innerHTML = `<span class="badge badge-err">出错</span>`;
+                        scoreCell.textContent = "格式错误";
+                    } else if (res.is_bonafide) {
+                        statusCell.innerHTML = `<span class="badge badge-real">真实</span>`;
+                    } else {
+                        statusCell.innerHTML = `<span class="badge badge-fake">伪造</span>`;
+                    }
+                }
+            });
+        }
+    </script>
 </body>
 </html>
